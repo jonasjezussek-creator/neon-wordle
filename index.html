@@ -19,7 +19,7 @@
 (function () {
   function fit() {
     var standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-    var h = standalone ? Math.max(window.innerHeight, screen.height) : window.innerHeight;
+    var h = standalone ? Math.max(window.innerHeight, document.documentElement.clientHeight, screen.height) : window.innerHeight;
     window.APP_H = h;
     document.documentElement.style.setProperty('--appH', h + 'px');
     document.documentElement.classList.toggle('standalone', !!standalone);
@@ -31,7 +31,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Monoton&family=Rubik+Glitch&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
@@ -87,8 +87,9 @@
   </div>
 </div>
 
-<script src="words.js"></script>
-<script src="game.js"></script>
+<script src="words.js?v=4"></script>
+<script src="game.js?v=4"></script>
+<div class="version">v4</div>
 
 <script type="module">
 import * as THREE from 'three';

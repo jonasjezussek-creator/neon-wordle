@@ -729,3 +729,6 @@ body > canvas:first-child { height: var(--appH, 100vh) !important; }
   padding-top: max(env(safe-area-inset-top), 50px);
   padding-bottom: max(env(safe-area-inset-bottom), 18px);
 }
+
+/* kleine Versionsnummer unten rechts (hilft beim Prüfen, ob das iPhone die neue Version hat) */
+.version { position: fixed; right: 6px; top: calc(var(--appH, 100vh) - 14px); z-index: 3; font: 9px 'Orbitron', sans-serif; color: rgba(255,255,255,.25); pointer-events: none; }
