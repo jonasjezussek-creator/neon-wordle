@@ -674,7 +674,8 @@ html, body { touch-action: manipulation; -webkit-user-select: none; user-select:
   .icon-btn { width: 34px; height: 34px; font-size: 15px; right: 4px; }
 
   /* Kachelgröße passt sich Breite UND Höhe des Handys an */
-  :root { --tile: max(38px, min(13.4vw, calc((100dvh - 430px) / 6.4))); --gap: 6px; }
+  :root { --tile: max(38px, min(13.4vw, calc((var(--appH, 100dvh) - 430px) / 6.4))); --gap: 6px; }
+  html.standalone { --tile: max(38px, min(13.4vw, calc((var(--appH, 100dvh) - 490px) / 6.4))); }
 
   /* schmalerer 3D-Rahmen */
   .frame { --ow: 8px; --bw: 10px; --iw: 6px; --r: 22px; --bulb-inset: 13px; padding: 30px; margin-top: 54px; }
@@ -714,4 +715,17 @@ html, body { touch-action: manipulation; -webkit-user-select: none; user-select:
   .key.wide { flex: 1.5; font-size: 10px; }
   .endcard-inner { padding: 26px 22px; margin: 0 14px; }
   .end-word { font-size: 32px; }
+}
+
+/* =====================================================================
+   iPhone-App vom Home-Bildschirm: volle Höhe + Abstand zur Kamera-Insel
+   ===================================================================== */
+html, body { height: var(--appH, 100%); }
+#app { bottom: auto; height: var(--appH, 100%); }
+.vignette, .endcard, .flash { bottom: auto; height: var(--appH, 100%); }
+#fx { height: var(--appH, 100vh); }
+body > canvas:first-child { height: var(--appH, 100vh) !important; }
+.standalone #app {
+  padding-top: max(env(safe-area-inset-top), 50px);
+  padding-bottom: max(env(safe-area-inset-bottom), 18px);
 }

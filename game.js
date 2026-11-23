@@ -180,7 +180,7 @@
   const DPR = Math.min(devicePixelRatio || 1, 2);
   let FW, FH;
   function resizeFx() {
-    FW = innerWidth; FH = innerHeight;
+    FW = innerWidth; FH = window.APP_H || innerHeight;
     fxc.width = FW * DPR; fxc.height = FH * DPR;
     fx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }

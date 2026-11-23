@@ -13,6 +13,22 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>Wordle</title>
+<script>
+/* iPhone-App vom Home-Bildschirm: dort meldet iOS die Höhe manchmal zu klein,
+   dann rutscht alles nach oben. Wir nehmen in dem Fall die volle Bildschirmhöhe. */
+(function () {
+  function fit() {
+    var standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+    var h = standalone ? Math.max(window.innerHeight, screen.height) : window.innerHeight;
+    window.APP_H = h;
+    document.documentElement.style.setProperty('--appH', h + 'px');
+    document.documentElement.classList.toggle('standalone', !!standalone);
+  }
+  fit();
+  addEventListener('resize', fit);
+  addEventListener('orientationchange', function () { setTimeout(fit, 300); });
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Monoton&family=Rubik+Glitch&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -89,14 +105,14 @@ const pick = a => a[(Math.random() * a.length) | 0];
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 const MOBILE = matchMedia('(max-width: 600px)').matches;
 renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(innerWidth, window.APP_H || innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#05020f');
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / (window.APP_H || innerHeight), 0.1, 3000);
 camera.position.set(0, 0, 30);
 
 // ================= Texturen (selbst gemalt) =================
@@ -283,7 +299,7 @@ function spawnMeteor() {
 // ================= Nachleuchten (Bloom) =================
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.45, 0.6);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, window.APP_H || innerHeight), 0.7, 0.45, 0.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -291,8 +307,9 @@ composer.addPass(new OutputPass());
 const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
 addEventListener('mousemove', e => { mouse.tx = e.clientX / innerWidth - 0.5; mouse.ty = e.clientY / innerHeight - 0.5; });
 addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  const h = window.APP_H || innerHeight;
+  camera.aspect = innerWidth / h; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, h); composer.setSize(innerWidth, h);
 });
 
 // ================= Schnittstelle für Spiel-Effekte =================
