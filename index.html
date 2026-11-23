@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- iPhone: als App vom Home-Bildschirm starten (Vollbild, eigenes Icon) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wordle">
+<meta name="theme-color" content="#05020f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Wordle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Monoton&family=Rubik+Glitch&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="vignette"></div>
+
+<main id="app">
+  <header>
+    <h1 class="title chrome" data-text="WORDLE">WORDLE</h1>
+    <button id="mute" class="icon-btn" aria-label="Sound an/aus">♪</button>
+  </header>
+
+  <section class="frame" id="frame">
+    <aside class="meter" id="meter">
+      <div class="stars-hud" id="hud"><div class="star3d" id="hudStar"><div class="spin" id="starSpin"></div></div><span id="starCount">0</span></div>
+      <div class="meter-body">
+        <div class="tiers" id="tiers"></div>
+        <div class="bar" id="bar">
+          <div class="ghost" id="ghost"></div>
+          <div class="fill" id="fill"></div>
+          <div class="marks" id="marks"></div>
+        </div>
+      </div>
+      <div class="meter-legend"><span class="ghost-dot"></span>IF SOLVED<br>NEXT TRY</div>
+    </aside>
+    <div class="rim" aria-hidden="true">
+      <div class="bev outer"><i class="t"></i><i class="r"></i><i class="b"></i><i class="l"></i></div>
+      <div class="band"></div>
+      <div class="tube"></div>
+      <div class="bev inner"><i class="t"></i><i class="r"></i><i class="b"></i><i class="l"></i></div>
+    </div>
+    <div class="bulbs" id="bulbs"></div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section class="kb" id="kb"></section>
+</main>
+
+<div id="toast" class="toast"></div>
+<div id="banner" class="banner"></div>
+<div id="flash" class="flash"></div>
+<canvas id="fx"></canvas>
+<div id="endcard" class="endcard">
+  <div class="endcard-inner">
+    <div class="end-title" id="endTitle"></div>
+    <div class="end-stars" id="endStars"></div>
+    <div class="end-word" id="endWord"></div>
+    <button class="play-btn" id="again">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script src="words.js"></script>
+<script src="game.js"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const NEON = ['#ff3cc7', '#ff6ad5', '#c86bff', '#7b3cff', '#00e5ff', '#5ff3ff', '#3c7bff'];
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[(Math.random() * a.length) | 0];
+
+// ================= Grundgerüst =================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+const MOBILE = matchMedia('(max-width: 600px)').matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#05020f');
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3000);
+camera.position.set(0, 0, 30);
+
+// ================= Texturen (selbst gemalt) =================
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const dotTex = canvasTex(64, 64, (g, w) => {
+  const grd = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.25, 'rgba(255,255,255,0.6)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, w, w);
+});
+const sparkleTex = canvasTex(256, 256, (g, w) => {
+  const c = w / 2;
+  const grd = g.createRadialGradient(c, c, 0, c, c, c * 0.35);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, w, w);
+  const ray = (ang, len, wid) => {
+    g.save(); g.translate(c, c); g.rotate(ang);
+    const lg = g.createLinearGradient(-len, 0, len, 0);
+    lg.addColorStop(0, 'rgba(255,255,255,0)');
+    lg.addColorStop(0.5, 'rgba(255,255,255,1)');
+    lg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = lg;
+    g.beginPath(); g.moveTo(-len, 0); g.lineTo(0, -wid); g.lineTo(len, 0); g.lineTo(0, wid); g.fill();
+    g.restore();
+  };
+  ray(0, c, 5); ray(Math.PI / 2, c, 5); ray(Math.PI / 4, c * 0.55, 3); ray(-Math.PI / 4, c * 0.55, 3);
+});
+
+// Rauschen für Wolken und Planeten-Oberflächen
+function makeNoise(seed) {
+  const p = new Uint8Array(512);
+  let s = seed;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const perm = [...Array(256).keys()].sort(() => rnd() - 0.5);
+  for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const grad = [...Array(256)].map(() => rnd());
+  const fade = t => t * t * (3 - 2 * t);
+  const n2 = (x, y) => {
+    const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+    const xf = x - Math.floor(x), yf = y - Math.floor(y);
+    const a = grad[p[p[xi] + yi]], b = grad[p[p[xi + 1] + yi]];
+    const c = grad[p[p[xi] + yi + 1]], d = grad[p[p[xi + 1] + yi + 1]];
+    const u = fade(xf), v = fade(yf);
+    return (a + (b - a) * u) + ((c + (d - c) * u) - (a + (b - a) * u)) * v;
+  };
+  return (x, y, oct = 5) => {
+    let v = 0, amp = 0.5, f = 1;
+    for (let i = 0; i < oct; i++) { v += amp * n2(x * f, y * f); amp *= 0.5; f *= 2; }
+    return v;
+  };
+}
+
+function cloudTex(seed) {
+  const fbm = makeNoise(seed);
+  return canvasTex(256, 256, (g, w) => {
+    const img = g.createImageData(w, w);
+    for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) {
+      const dx = x / w - 0.5, dy = y / w - 0.5;
+      const r = Math.sqrt(dx * dx + dy * dy) * 2;
+      const n = fbm(x / 40, y / 40, 6);
+      let a = Math.max(0, n - 0.35) * 2.2 * Math.max(0, 1 - r * r);
+      a = Math.min(1, a);
+      const i = (y * w + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+      img.data[i + 3] = a * 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+
+// ================= Sternenhimmel =================
+{
+  const N = MOBILE ? 4000 : 7000;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N), phase = new Float32Array(N);
+  const c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    const r = rand(250, 900), th = rand(0, Math.PI * 2), ph = Math.acos(rand(-1, 1));
+    pos.set([r * Math.sin(ph) * Math.cos(th), r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph) - 100], i * 3);
+    c.set(Math.random() < 0.7 ? '#ffffff' : pick(NEON));
+    col.set([c.r, c.g, c.b], i * 3);
+    size[i] = Math.random() < 0.97 ? rand(2, 5) : rand(8, 14);
+    phase[i] = Math.random();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  geo.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+  var starMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uPR: { value: renderer.getPixelRatio() }, uBoost: { value: 1 } },
+    vertexShader: `
+      attribute vec3 aColor; attribute float aSize; attribute float aPhase;
+      uniform float uTime; uniform float uPR;
+      varying vec3 vColor; varying float vTw;
+      void main(){
+        vec4 mv = modelViewMatrix * vec4(position,1.0);
+        gl_Position = projectionMatrix * mv;
+        vTw = 0.45 + 0.55 * pow(0.5 + 0.5*sin(uTime*(0.8+aPhase*2.5) + aPhase*40.0), 2.0);
+        gl_PointSize = aSize * uPR * (400.0 / -mv.z);
+        vColor = aColor;
+      }`,
+    fragmentShader: `
+      uniform float uBoost; varying vec3 vColor; varying float vTw;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = pow(smoothstep(0.5, 0.0, d), 2.5);
+        gl_FragColor = vec4(vColor * vTw * 1.2 * uBoost, a * vTw);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  scene.add(new THREE.Points(geo, starMat));
+}
+
+// ================= Nebel-Wolken =================
+const clouds = [];
+{
+  const texes = [cloudTex(7), cloudTex(42), cloudTex(1337), cloudTex(99)];
+  const layout = [
+    [-120, 40, -320, 380, '#ff3cc7'], [140, -30, -360, 420, '#7b3cff'],
+    [20, 90, -400, 360, '#00e5ff'], [-60, -110, -300, 300, '#c86bff'],
+    [200, 110, -420, 320, '#ff6ad5'], [-220, -40, -380, 340, '#3c7bff'],
+    [60, 0, -450, 500, '#b44cff'],
+  ];
+  layout.forEach(([x, y, z, s, color], i) => {
+    const m = new THREE.SpriteMaterial({ map: texes[i % 4], color, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false });
+    const sp = new THREE.Sprite(m);
+    sp.position.set(x, y, z); sp.scale.set(s, s, 1);
+    sp.userData = { spin: rand(-0.02, 0.02), base: 0.12 + Math.random() * 0.06, ph: rand(0, 6), col: new THREE.Color(color) };
+    scene.add(sp); clouds.push(sp);
+  });
+}
+
+// ================= Funkel-Sterne am Himmel =================
+const skySparkles = [];
+for (let i = 0; i < 18; i++) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkleTex, color: pick(['#ffffff', '#ff9ae6', '#9ff6ff', '#d6a8ff']), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  sp.position.set(rand(-90, 90), rand(-50, 50), rand(-80, -40));
+  sp.userData = { s: rand(3, 8), sp: rand(0.3, 1.1), ph: rand(0, 6) };
+  scene.add(sp); skySparkles.push(sp);
+}
+
+// ================= Glitzerstaub nah an der Kamera =================
+let dust;
+{
+  const N = 600;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    pos.set([rand(-40, 40), rand(-25, 25), rand(-30, 20)], i * 3);
+    c.set(pick(NEON)); col.set([c.r, c.g, c.b], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.25, map: dotTex, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(dust);
+}
+
+// ================= Sternschnuppen =================
+const meteors = [];
+function spawnMeteor() {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const c = new THREE.Color(pick(['#5ff3ff', '#ff6ad5', '#ffffff', '#c86bff']));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array([2, 2, 2, c.r * 0, c.g * 0, c.b * 0]), 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const head = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: c, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  head.scale.set(2.5, 2.5, 1);
+  const start = new THREE.Vector3(rand(-60, 80), rand(30, 50), rand(-60, -20));
+  const vel = new THREE.Vector3(rand(-90, -50), rand(-45, -25), 0);
+  scene.add(line, head);
+  meteors.push({ line, head, p: start, vel, life: 0, max: rand(0.9, 1.5), c });
+}
+
+// ================= Nachleuchten (Bloom) =================
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.7, 0.45, 0.6);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ================= Bewegung =================
+const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+addEventListener('mousemove', e => { mouse.tx = e.clientX / innerWidth - 0.5; mouse.ty = e.clientY / innerHeight - 0.5; });
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+
+// ================= Schnittstelle für Spiel-Effekte =================
+// Das Spiel ruft z. B. window.space.pulse(1, '#00e5ff') oder window.space.gloom() auf.
+const fx = { energy: 0, color: new THREE.Color('#ffffff'), gloom: 0, shake: 0 };
+const gloomColor = new THREE.Color('#ff1a3c');
+window.space = {
+  pulse(strength = 1, color = '#ffffff') { fx.energy = Math.max(fx.energy, strength); fx.color.set(color); fx.shake = Math.max(fx.shake, strength * 0.6); },
+  gloom(strength = 1) { fx.gloom = Math.max(fx.gloom, strength); fx.shake = Math.max(fx.shake, strength * 0.8); },
+};
+const tmpC = new THREE.Color();
+
+const clock = new THREE.Clock();
+let nextMeteor = 1;
+const lookTarget = new THREE.Vector3(0, 0, -20);
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  mouse.x += (mouse.tx - mouse.x) * 0.03; mouse.y += (mouse.ty - mouse.y) * 0.03;
+
+  // Kamera schwebt sanft und folgt der Maus ein bisschen
+  camera.position.x = Math.sin(t * 0.07) * 2 + mouse.x * 6;
+  camera.position.y = Math.cos(t * 0.09) * 1.2 - mouse.y * 4;
+  fx.energy = Math.max(0, fx.energy - dt * 0.7);
+  fx.gloom = Math.max(0, fx.gloom - dt * 0.45);
+  fx.shake = Math.max(0, fx.shake - dt * 1.6);
+  camera.position.x += (Math.random() - 0.5) * fx.shake * 1.2;
+  camera.position.y += (Math.random() - 0.5) * fx.shake * 1.2;
+  camera.lookAt(lookTarget);
+  const fov = 55 - fx.energy * 7 + fx.gloom * 3;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  bloom.strength = 0.7 + fx.energy * 1.3;
+  starMat.uniforms.uBoost.value = (1 + fx.energy * 0.8) * (1 - fx.gloom * 0.65);
+
+  starMat.uniforms.uTime.value = t;
+
+  clouds.forEach(c => {
+    const u = c.userData;
+    c.material.rotation += u.spin * dt * (1 + fx.energy * 8);
+    c.material.opacity = u.base + 0.04 * Math.sin(t * 0.3 + u.ph) + fx.energy * 0.22 + fx.gloom * 0.1;
+    tmpC.copy(u.col).lerp(fx.color, fx.energy * 0.5).lerp(gloomColor, fx.gloom * 0.8);
+    c.material.color.copy(tmpC);
+  });
+
+  skySparkles.forEach(s => {
+    const a = Math.pow(Math.max(0, Math.sin(t * s.userData.sp + s.userData.ph)), 10);
+    s.material.opacity = a;
+    const sc = s.userData.s * (0.5 + a);
+    s.scale.set(sc, sc, 1);
+  });
+
+  dust.rotation.y = t * 0.01;
+  dust.position.y = Math.sin(t * 0.2) * 0.8;
+
+  nextMeteor -= dt;
+  if (nextMeteor <= 0) { spawnMeteor(); nextMeteor = rand(1.8, 4.5); }
+  for (let i = meteors.length - 1; i >= 0; i--) {
+    const m = meteors[i];
+    m.life += dt;
+    m.p.addScaledVector(m.vel, dt);
+    const tail = m.p.clone().addScaledVector(m.vel, -0.25);
+    const arr = m.line.geometry.attributes.position.array;
+    arr.set([m.p.x, m.p.y, m.p.z, tail.x, tail.y, tail.z]);
+    m.line.geometry.attributes.position.needsUpdate = true;
+    const fade = Math.sin(Math.min(1, m.life / m.max) * Math.PI);
+    m.line.material.opacity = fade; m.head.material.opacity = fade;
+    m.head.position.copy(m.p);
+    if (m.life > m.max) { scene.remove(m.line, m.head); m.line.geometry.dispose(); meteors.splice(i, 1); }
+  }
+
+  composer.render();
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
